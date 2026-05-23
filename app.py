@@ -35,7 +35,7 @@ def muat_data_staff():
     try:
         df = pd.read_csv(URL_CSV_STAFF)
         # Tukar format dataframe menjadi dictionary untuk rujukan kuota AL
-        kuota_dict = pd.series(df['Kuota AL'].values, index=df['Nama Staff']).to_dict()
+        kuota_dict = pd.Series(df['Kuota AL'].values, index=df['Nama Staff']).to_dict()
         return list(df['Nama Staff'].dropna().unique()), kuota_dict
     except:
         # Pilihan kecemasan jika Google Sheets gagal dibaca atau kosong
