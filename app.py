@@ -5,46 +5,35 @@ import calendar
 
 # 1. KONFIGURASI HALAMAN WEB
 st.set_page_config(page_title="Sistem Pengurusan Jadual Staf", layout="wide")
-st.title("📅 Sistem Pengurusan Jadual Kerja Staf Online (Dinamik)")
-st.markdown("Sistem pengurusan jadual di mana senarai nama staf dan kuota diuruskan terus melalui Google Sheets.")
+st.title("📅 Sistem Pengurusan Jadual Kerja Staf Online (Official Connection)")
+st.markdown("Sistem pengurusan jadual pintar yang dihubungkan terus bersama Google Sheets.")
 
-# 2. SAMBUNGAN GOOGLE SHEETS
-# Sila gantikan URL di bawah dengan URL Google Sheets anda yang telah di-SHARE sebagai EDITOR
-URL_SHEETS = "https://docs.google.com/spreadsheets/d/1MYKyE2kg6RiPkEBHiUl5J5UXZxB6Y-SxVf-oUU_KVIg/edit?pli=1&gid=1814837446#gid=1814837446"
+# 2. SAMBUNGAN RASMI GOOGLE SHEETS
+# Sila pastikan link di bawah adalah link Google Sheets anda yang telah di-SHARE sebagai EDITOR
+URL_SHEETS = "PASANG_LINK_GOOGLE_SHEETS_ANDA_DI_SINI"
 
-# Tukar format URL untuk membaca Sheet 'Rekod' dan Sheet 'Staff'
-if "edit?usp=sharing" in URL_SHEETS:
-    BASE_URL = URL_SHEETS.replace("edit?usp=sharing", "gviz/tq?tqx=out:csv&")
-else:
-    BASE_URL = URL_SHEETS + "/gviz/tq?tqx=out:csv&"
-
-URL_CSV_REKOD = BASE_URL + "sheet=Rekod"
-URL_CSV_STAFF = BASE_URL + "sheet=Staff"
-
-# Fungsi membaca data jadual harian
-def muat_data_jadual():
+@st.cache_data(ttl=10)  # Menyegarkan data setiap 10 saat jika ada perubahan di Sheets
+def muat_semua_data():
     try:
-        df = pd.read_csv(URL_CSV_REKOD)
-        df['Tarikh'] = pd.to_datetime(df['Tarikh']).dt.date
-        return df
-    except:
-        return pd.DataFrame(columns=['Tarikh', 'Nama Staff', 'Status', 'Catatan'])
-
-# Fungsi membaca data konfigurasi staff dari Google Sheets
-def muat_data_staff():
+        # Menggunakan fungsi pembacaan data rasmi dari Streamlit
+        df_rekod = st.connection("sheets", type=st.connections.SQLConnection).query(f'SELECT * FROM "{URL_SHEETS}" WHERE 1=1', sheet="Rekod")
+        df_rekod['Tarikh'] = pd.to_datetime(df_rekod['Tarikh']).dt.date
+    except Exception:
+        df_rekod = pd.DataFrame(columns=['Tarikh', 'Nama Staff', 'Status', 'Catatan'])
+        
     try:
-        df = pd.read_csv(URL_CSV_STAFF)
-        # Tukar format dataframe menjadi dictionary untuk rujukan kuota AL
-        kuota_dict = pd.Series(df['Kuota AL'].values, index=df['Nama Staff']).to_dict()
-        return list(df['Nama Staff'].dropna().unique()), kuota_dict
-    except:
-        # Pilihan kecemasan jika Google Sheets gagal dibaca atau kosong
-        st.error("Gagal membaca helaian 'Staff' di Google Sheets. Sila pastikan ejaan nama sheet betul.")
-        return ["Sila Isi Nama Di Sheets"], {"Sila Isi Nama Di Sheets": 0}
+        df_staff = st.connection("sheets", type=st.connections.SQLConnection).query(f'SELECT * FROM "{URL_SHEETS}" WHERE 1=1', sheet="Staff")
+        senarai = list(df_staff['Nama Staff'].dropna().unique())
+        kuota = pd.Series(df_staff['Kuota AL'].values, index=df_staff['Nama Staff']).to_dict()
+    except Exception as e:
+        st.error(f"⚠️ Sistem masih gagal membaca Google Sheets anda. Ralat: {e}")
+        senarai = ["Sila Isi Nama Di Sheets"]
+        kuota = {"Sila Isi Nama Di Sheets": 0}
+        
+    return df_rekod, senarai, kuota
 
-# Muat turun semua data terkini dari cloud
-df_asal = muat_data_jadual()
-SENARAI_STAFF, KUOTA_AL_ASAL = muat_data_staff()
+# Panggil fungsi untuk dapatkan data terkini
+df_asal, SENARAI_STAFF, KUOTA_AL_ASAL = muat_semua_data()
 
 # 3. DATA PRA-PASANG CUTI UMUM MALAYSIA 2026
 CUTI_UMUM_2026 = {
@@ -74,7 +63,7 @@ if menu == "Atur Jadual Staf":
     
     col1, col2 = st.columns(2)
     with col1:
-        staf_dipilih = st.selectbox("Pilih Nama Staff (Senarai automatik dari Sheets)", SENARAI_STAFF)
+        staf_dipilih = st.selectbox("Pilih Nama Staff", SENARAI_STAFF)
         tarikh_dipilih = st.date_input("Pilih Tarikh", date.today())
     
     is_ph = tarikh_dipilih in CUTI_UMUM_2026
@@ -110,7 +99,7 @@ elif menu == "Lihat Jadual Bulanan":
     if ph_bulan_ini:
         st.markdown(f"📌 **Cuti Umum Bulan Ini:** {', '.join(ph_bulan_ini)}")
         
-    if not df_asal.empty:
+    if not df_asal.empty and SENARAI_STAFF != ["Sila Isi Nama Di Sheets"]:
         df_asal['Tarikh'] = pd.to_datetime(df_asal['Tarikh'])
         df_tapis = df_asal[(df_asal['Tarikh'].dt.month == bulan_pilih) & (df_asal['Tarikh'].dt.year == tahun_pilih)]
         
@@ -137,7 +126,7 @@ elif menu == "Lihat Jadual Bulanan":
         st.dataframe(grid_jadual, use_container_width=True)
         st.caption("Petunjuk: [PH] = Cuti Umum, Bekerja = Hari Kerja, RD = Rest Day, AL = Annual Leave, SL = Sick Leave")
     else:
-        st.warning("Database jadual masih kosong. Sila isi sheet 'Rekod' terlebih dahulu.")
+        st.warning("Database jadual masih kosong atau senarai staf belum diisi di Google Sheets.")
 
 # --- MENU 3: RINGKASAN & BAKI AL STAFF ---
 elif menu == "Ringkasan & Baki AL Staff":
@@ -149,7 +138,7 @@ elif menu == "Ringkasan & Baki AL Staff":
     st.subheader(f"Statistik Tugasan Bulan {calendar.month_name[bulan_pilih]} {tahun_pilih}")
     df_ringkasan = pd.DataFrame(0, index=SENARAI_STAFF, columns=PILIHAN_STATUS)
     
-    if not df_asal.empty:
+    if not df_asal.empty and SENARAI_STAFF != ["Sila Isi Nama Di Sheets"]:
         df_asal['Tarikh'] = pd.to_datetime(df_asal['Tarikh'])
         df_tapis = df_asal[(df_asal['Tarikh'].dt.month == bulan_pilih) & (df_asal['Tarikh'].dt.year == tahun_pilih)]
         
@@ -165,26 +154,26 @@ elif menu == "Ringkasan & Baki AL Staff":
     st.subheader(f"📉 Penjejak Baki Annual Leave (AL) Bagi Tahun {tahun_pilih}")
     
     data_baki_al = []
-    for staff in SENARAI_STAFF:
-        # Ambil kuota asal daripada Google Sheets secara dinamik
-        kuota_asal = KUOTA_AL_ASAL.get(staff, 0)
-        
-        if not df_asal.empty:
-            al_diambil = len(df_asal[
-                (df_asal['Nama Staff'] == staff) & 
-                (df_asal['Status'] == "AL (Annual Leave)") & 
-                (df_asal['Tarikh'].dt.year == tahun_pilih)
-            ])
-        else:
-            al_diambil = 0
+    if SENARAI_STAFF != ["Sila Isi Nama Di Sheets"]:
+        for staff in SENARAI_STAFF:
+            kuota_asal = KUOTA_AL_ASAL.get(staff, 0)
             
-        baki_semasa = kuota_asal - al_diambil
-        data_baki_al.append({
-            "Nama Staff": staff,
-            "Kuota Asal Dari Sheets (Hari)": kuota_asal,
-            "AL Telah Diambil": al_diambil,
-            "Baki AL Semasa": baki_semasa
-        })
-        
-    df_baki_al = pd.DataFrame(data_baki_al).set_index("Nama Staff")
-    st.table(df_baki_al)
+            if not df_asal.empty:
+                al_diambil = len(df_asal[
+                    (df_asal['Nama Staff'] == staff) & 
+                    (df_asal['Status'] == "AL (Annual Leave)") & 
+                    (df_asal['Tarikh'].dt.year == tahun_pilih)
+                ])
+            else:
+                al_diambil = 0
+                
+            baki_semasa = kuota_asal - al_diambil
+            data_baki_al.append({
+                "Nama Staff": staff,
+                "Kuota Asal Dari Sheets (Hari)": kuota_asal,
+                "AL Telah Diambil": al_diambil,
+                "Baki AL Semasa": baki_semasa
+            })
+            
+        df_baki_al = pd.DataFrame(data_baki_al).set_index("Nama Staff")
+        st.table(df_baki_al)
