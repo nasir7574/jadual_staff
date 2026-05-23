@@ -5,34 +5,43 @@ import calendar
 
 # 1. KONFIGURASI HALAMAN WEB
 st.set_page_config(page_title="Sistem Pengurusan Jadual Staf", layout="wide")
-st.title("📅 Sistem Pengurusan Jadual Kerja Staf Online (Official Connection)")
+st.title("📅 Sistem Pengurusan Jadual Kerja Staf Online (Versi Ringkas)")
 st.markdown("Sistem pengurusan jadual pintar yang dihubungkan terus bersama Google Sheets.")
 
-# 2. SAMBUNGAN RASMI GOOGLE SHEETS
+# 2. SAMBUNGAN GOOGLE SHEETS (Guna teknik pembersihan URL)
 # Sila pastikan link di bawah adalah link Google Sheets anda yang telah di-SHARE sebagai EDITOR
-URL_SHEETS = "PASANG_LINK_GOOGLE_SHEETS_ANDA_DI_SINI"
+URL_SHEETS = "https://docs.google.com/spreadsheets/d/1MYKyE2kg6RiPkEBHiUl5J5UXZxB6Y-SxVf-oUU_KVIg/edit?pli=1&gid=1814837446#gid=1814837446"
 
-@st.cache_data(ttl=10)  # Menyegarkan data setiap 10 saat jika ada perubahan di Sheets
+# Fungsi untuk menukar URL Google Sheets biasa menjadi format pembacaan data CSV yang tepat
+def dapatkan_url_csv(sheet_name):
+    # Buang bahagian belakang url yang tidak berkenaan jika ada
+    url_bersih = URL_SHEETS.split("/edit")[0]
+    return f"{url_bersih}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
+
 def muat_semua_data():
+    # A. Muat data daripada sheet 'Rekod'
     try:
-        # Menggunakan fungsi pembacaan data rasmi dari Streamlit
-        df_rekod = st.connection("sheets", type=st.connections.SQLConnection).query(f'SELECT * FROM "{URL_SHEETS}" WHERE 1=1', sheet="Rekod")
+        url_rekod = dapatkan_url_csv("Rekod")
+        df_rekod = pd.read_csv(url_rekod)
         df_rekod['Tarikh'] = pd.to_datetime(df_rekod['Tarikh']).dt.date
     except Exception:
         df_rekod = pd.DataFrame(columns=['Tarikh', 'Nama Staff', 'Status', 'Catatan'])
         
+    # B. Muat data daripada sheet 'Staff'
     try:
-        df_staff = st.connection("sheets", type=st.connections.SQLConnection).query(f'SELECT * FROM "{URL_SHEETS}" WHERE 1=1', sheet="Staff")
+        url_staff = dapatkan_url_csv("Staff")
+        df_staff = pd.read_csv(url_staff)
+        # Pastikan nama kolum sepadan dengan dalam sheets
         senarai = list(df_staff['Nama Staff'].dropna().unique())
         kuota = pd.Series(df_staff['Kuota AL'].values, index=df_staff['Nama Staff']).to_dict()
     except Exception as e:
-        st.error(f"⚠️ Sistem masih gagal membaca Google Sheets anda. Ralat: {e}")
+        st.error(f"⚠️ Sistem gagal membaca Google Sheets anda. Ralat pembacaan: {e}")
         senarai = ["Sila Isi Nama Di Sheets"]
         kuota = {"Sila Isi Nama Di Sheets": 0}
         
     return df_rekod, senarai, kuota
 
-# Panggil fungsi untuk dapatkan data terkini
+# Panggil fungsi untuk ambil data
 df_asal, SENARAI_STAFF, KUOTA_AL_ASAL = muat_semua_data()
 
 # 3. DATA PRA-PASANG CUTI UMUM MALAYSIA 2026
